@@ -39,22 +39,57 @@ jobs:
               "ndk;27.3.13750724" || true
           fi
 
-      - name: Find Android project
+      - name: Find or extract Android project
         run: |
           echo "Searching for Gradle project..."
 
-          PROJECT_DIR=$(dirname "$(find . -name settings.gradle.kts -o -name settings.gradle | head -1)")
+          PROJECT_DIR=""
 
-          if [ -z "$PROJECT_DIR" ] || [ "$PROJECT_DIR" = "." ]; then
-            PROJECT_DIR="."
+          SETTINGS_FILE=$(find . \
+            -type f \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+            -print -quit)
+
+          if [ -n "$SETTINGS_FILE" ]; then
+            PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+            echo "Gradle project found: $PROJECT_DIR"
+          else
+            echo "No Gradle project found."
+            echo "Searching for ZIP files..."
+
+            ZIP_FILE=$(find . -type f -name "*.zip" -print -quit)
+
+            if [ -n "$ZIP_FILE" ]; then
+              echo "Found ZIP: $ZIP_FILE"
+
+              mkdir -p extracted
+              unzip -q "$ZIP_FILE" -d extracted
+
+              SETTINGS_FILE=$(find extracted \
+                -type f \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+                -print -quit)
+
+              if [ -n "$SETTINGS_FILE" ]; then
+                PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+                echo "Extracted project: $PROJECT_DIR"
+              fi
+            fi
           fi
 
-          echo "Project directory: $PROJECT_DIR"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android Gradle project was not found."
+            echo "Repository contents:"
+            find . -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Show project files
+      - name: Show project
         run: |
-          echo "Project:"
+          echo "Building from:"
+          echo "$PROJECT_DIR"
+
+          echo "Project files:"
           ls -la "$PROJECT_DIR"
 
       - name: Build APK
